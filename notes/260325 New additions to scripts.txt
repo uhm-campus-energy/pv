@@ -1,0 +1,4 @@
+Download the dates_pv_power table
+It will check if it's 15-min or 1-hr data
+It will trim the data
+It will add _hr to name if it's 1 hr data

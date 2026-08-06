@@ -1,0 +1,19 @@
+Open question: how should 01_upload_outputs.py summarize errors (which files failed to upload and why)?
+
+Current behavior:
+- Failed uploads print an inline error to the console and the script moves on to the next file.
+- Nothing is collected into a summary, and nothing is logged to a file.
+
+Options to consider:
+1. Console summary only
+   - Track failures in a list (filename, table, error message) during the run.
+   - Print a "FAILED UPLOADS" block at the end so failures aren't buried in scrolling output.
+   - Good enough if the script is always run interactively and watched live.
+
+2. Console summary + log file
+   - Same as above, plus append failures to a log file (e.g. outputs/upload_errors.log).
+   - Needed if this ever runs unattended (cron job, scheduled task) where no one sees stdout.
+
+Recommendation: start with option 1; add the log file if/when this gets automated to run unattended.
+
+Decision: not yet made - revisit later.
