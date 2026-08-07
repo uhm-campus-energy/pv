@@ -4,11 +4,12 @@ from typing import Optional, List
 from pathlib import Path
 import pandas as pd
 
-# === SETTINGS ===
-FOLDER = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\warrior_missing"
-EXPORT_FOLDER = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\cleaned"
-OUTPUT = os.path.join(EXPORT_FOLDER, "wrc_pv_missing_cleaned.csv")
-dates_csv_path = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\dates_pv_power.csv"
+# === SETTINGS (paths relative to project root) ===
+project_root = Path(__file__).resolve().parent.parent
+input_dir = project_root / "data" / "wrc_sunnyportal"
+output_dir = project_root / "outputs"
+output_dir.mkdir(exist_ok=True)
+dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
 SENSOR_ID = 11
 DAY_FIRST = True  # <-- we parse as DD/MM (e.g., 04/02 = 4 Feb)
 
@@ -24,7 +25,7 @@ def year_from_filename(fname: str) -> Optional[int]:
 def clean_cell(s: Optional[str]) -> str:
     if s is None:
         return ""
-    s = s.replace("\u00A0", " ")  # NBSP -> space
+    s = s.replace(" ", " ")  # NBSP -> space
     s = s.strip()
     if s.startswith("="):
         s = s[1:].strip()
@@ -94,19 +95,19 @@ def sniff_delimiter(first_chunk: str) -> str:
         return ";" if ";" in first_chunk else ("," if "," in first_chunk else "\t")
 
 
-def move_duplicate_files(folder: str) -> List[str]:
+def move_duplicate_files(folder: Path) -> List[str]:
     """
     Check for files with identical content (byte-for-byte duplicates).
     Move duplicates to a 'duplicates' subfolder, keeping the first occurrence.
     Returns the list of unique file paths.
     """
-    duplicates_dir = Path(folder) / "duplicates"
+    duplicates_dir = folder / "duplicates"
     seen_hashes = {}
     unique_paths = []
 
     csv_files = sorted([f for f in os.listdir(folder) if f.lower().endswith(".csv")])
     for fname in csv_files:
-        path = os.path.join(folder, fname)
+        path = folder / fname
         with open(path, "rb") as f:
             file_hash = hashlib.md5(f.read()).hexdigest()
 
@@ -127,7 +128,7 @@ def move_duplicate_files(folder: str) -> List[str]:
 
 
 def detect_frequency(df: pd.DataFrame) -> str:
-    """Infer the dominant timestamp interval. Returns '15min' or '1h'."""
+    """Infer the dominant timestamp interval. Returns '15min' or '1hr'."""
     sorted_dt = df["datetime"].drop_duplicates().sort_values()
     if len(sorted_dt) < 2:
         return "unknown"
@@ -135,10 +136,10 @@ def detect_frequency(df: pd.DataFrame) -> str:
     median_diff = diffs.median()
     minutes = median_diff.total_seconds() / 60
     print(f"  Median timestamp interval: {minutes:.1f} minutes")
-    return "15min" if minutes <= 20 else "1h"
+    return "15min" if minutes <= 20 else "1hr"
 
 
-def get_cutoff_timestamp(dates_csv: str, meter: str, freq: str) -> Optional[pd.Timestamp]:
+def get_cutoff_timestamp(dates_csv: Path, meter: str, freq: str) -> Optional[pd.Timestamp]:
     """Look up the appropriate cutoff timestamp from dates_pv_power.csv."""
     try:
         dates_df = pd.read_csv(dates_csv, encoding="utf-8-sig")
@@ -171,8 +172,11 @@ def get_cutoff_timestamp(dates_csv: str, meter: str, freq: str) -> Optional[pd.T
 
 
 # === Step 1: Detect and move duplicate files ===
-print(f"Checking for duplicate files in: {FOLDER}")
-unique_paths = move_duplicate_files(FOLDER)
+# SunnyPortal exports come as multiple overlapping weekly CSVs — byte-identical
+# re-exports are moved aside here, and any remaining overlap between files is
+# caught below as duplicate rows once everything is combined.
+print(f"Checking for duplicate files in: {input_dir}")
+unique_paths = move_duplicate_files(input_dir)
 print(f"  {len(unique_paths)} unique file(s) remaining after duplicate check.\n")
 
 # === Step 2: Read and parse all unique files ===
@@ -199,7 +203,6 @@ for path in unique_paths:
 # === Step 3: Build DataFrame and sort by timestamp ===
 df = pd.DataFrame(rows, columns=["sensor_id", "meter_name", "datetime", "power_avg_kw"])
 if df.empty:
-    df = pd.DataFrame(columns=["sensor_id", "meter_name", "datetime", "power_avg_kw"])
     print("⚠ No valid rows found. Output file not written.")
 else:
     df["datetime"] = pd.to_datetime(df["datetime"])
@@ -207,10 +210,16 @@ else:
     print(f"Combined rows (pre-dedup): {len(df)}")
 
     # === Step 4: Remove duplicate rows ===
+    # Weekly exports overlap by design, so combining them will produce exact
+    # duplicate rows for the shared days — drop those here.
     before = len(df)
     df = df.drop_duplicates()
     after = len(df)
     print(f"Rows after row-level dedup: {after} (removed {before - after})")
+
+    # Nighttime hours have no reading in the source data, so this feed has
+    # natural gaps in the timeline — that's expected and left as-is (no
+    # interpolation or fill).
 
     # === Step 5: Detect timestamp frequency ===
     print("\nDetecting timestamp frequency...")
@@ -232,14 +241,16 @@ else:
     if df.empty:
         print("\n⚠ No data remains after trimming. Output file not written.")
     else:
-        # === Step 7: Format datetime and save ===
-        df["datetime"] = df["datetime"].dt.strftime("%m/%d/%Y %H:%M")
+        # === Step 7: Format datetime, build output path, and save ===
+        start_date = df["datetime"].min().strftime("%Y-%m-%d")
+        end_date = df["datetime"].max().strftime("%Y-%m-%d")
+        df["datetime"] = df["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        # Append _hr to filename if data is hourly
-        final_output = OUTPUT.replace(".csv", "_hr.csv") if freq == "1h" else OUTPUT
+        # Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
+        df = df[["datetime", "sensor_id", "power_avg_kw", "meter_name"]]
 
-        os.makedirs(EXPORT_FOLDER, exist_ok=True)
-        df.to_csv(final_output, index=False)
+        output_csv = output_dir / f"warrior_pv_cleaned_{start_date}_{end_date}_{freq}.csv"
+        df.to_csv(output_csv, index=False)
 
         print(f"\n=== Done ===")
         print(f" Files processed  : {len(unique_paths)}")
@@ -248,4 +259,4 @@ else:
         print(f" Frequency        : {freq}")
         print(f" Cutoff applied   : {cutoff}")
         print(f" Final rows       : {len(df)}")
-        print(f"✅ Wrote {len(df)} rows to {final_output}")
+        print(f"✅ Wrote {len(df)} rows to {output_csv}")

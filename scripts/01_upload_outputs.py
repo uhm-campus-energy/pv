@@ -28,7 +28,7 @@ METER_TO_FOLDER = {
     "law_clinic_pv": "lawclinic_solaredge",
     "warrior_pv": "wrc_sunnyportal",
     "parking_phase1_pv": "parkingphase1_egauge",
-    "gyms1,2_pv": "gym_egauge",
+    "gyms1,2_pv": "gym1,2_egauge",
     "bachman_pv": "bachman_egauge",
 }
 

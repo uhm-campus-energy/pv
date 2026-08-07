@@ -1,12 +1,21 @@
 import pandas as pd
+from pathlib import Path
 
-# File paths
-input_csv = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\frog2\data.csv"
-output_csv = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\cleaned\frog2_pv_cleaned.csv"
-dates_csv_path = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\dates_pv_power.csv"
+# File paths (relative to project root)
+project_root = Path(__file__).resolve().parent.parent
+input_dir = project_root / "data" / "frog2_egauge"
+input_csvs = list(input_dir.glob("*.csv"))
+if len(input_csvs) != 1:
+    raise FileNotFoundError(
+        f"Expected exactly one CSV in {input_dir}, found {len(input_csvs)}: {input_csvs}"
+    )
+input_csv = input_csvs[0]
+output_dir = project_root / "outputs"
+output_dir.mkdir(exist_ok=True)
+dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
+meter_name = "frog2_pv"
 ## when done upload to table from command line using folder on server, eg. \copy pv.pv_power2(sensor_id,meter_name,datetime,power_avg_kw) from '/home/eileen/uploads_uhm/frog2_pv_cleaned.csv' CSV HEADER;
 
-meter_name = "frog2_pv"
 
 print("=" * 80)
 print("CLEANING FROG2 SUBMETER DATA")
@@ -34,9 +43,6 @@ df_cleaned['power_avg_kw'] = df_cleaned['power_avg_kw'] * -1
 # Convert datetime column to pandas datetime for sorting/trimming
 df_cleaned['datetime'] = pd.to_datetime(df_cleaned['datetime'])
 
-# Reorder columns: sensor_id, meter_name, datetime, power_avg_kw
-df_cleaned = df_cleaned[['sensor_id', 'meter_name', 'datetime', 'power_avg_kw']]
-
 # --- Sort by timestamp ---
 df_cleaned = df_cleaned.sort_values('datetime').reset_index(drop=True)
 print(f"\n✓ Sorted rows by timestamp")
@@ -50,7 +56,7 @@ def detect_frequency(df):
     median_diff = diffs.median()
     minutes = median_diff.total_seconds() / 60
     print(f"  Median timestamp interval: {minutes:.1f} minutes")
-    return "15min" if minutes <= 20 else "1h"
+    return "15min" if minutes <= 20 else "1hr"
 
 print("\nDetecting timestamp frequency...")
 freq = detect_frequency(df_cleaned)
@@ -98,17 +104,27 @@ if cutoff is not None:
 else:
     print("  No trimming applied.")
 
-# --- Format datetime for output and build output path ---
-df_cleaned['datetime'] = df_cleaned['datetime'].dt.strftime('%m/%d/%Y %H:%M:%S')
+# Rename the input file to <subfolder>_<start-date>_<end-date>_<freq>.csv
+start_date = df_cleaned['datetime'].min().strftime('%Y-%m-%d')
+end_date = df_cleaned['datetime'].max().strftime('%Y-%m-%d')
+new_input_csv = input_dir / f"{input_dir.name}_{start_date}_{end_date}_{freq}.csv"
+if input_csv != new_input_csv:
+    input_csv.rename(new_input_csv)
+    print(f"\n✓ Renamed input file to: {new_input_csv.name}")
+    input_csv = new_input_csv
 
-# Append _hr to filename if data is hourly
-if freq == "1h":
-    final_output_csv = output_csv.replace(".csv", "_hr.csv")
-else:
-    final_output_csv = output_csv
+# Output file follows the same naming convention as the data file
+output_csv = output_dir / f"frog2_pv_cleaned_{start_date}_{end_date}_{freq}.csv"
+
+# --- Format datetime for output ---
+df_cleaned['datetime'] = df_cleaned['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
 print(f"\n✓ Multiplied power_avg_kw by -1 to change sign")
-print(f"✓ Converted datetime to MM/DD/YYYY HH:MM:SS format")
+print(f"✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
+
+# Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
+df_cleaned = df_cleaned[['datetime', 'sensor_id', 'power_avg_kw', 'meter_name']]
+
 print(f"\n✓ Cleaned data: {df_cleaned.shape[0]} rows × {df_cleaned.shape[1]} columns")
 print(f"  New columns: {list(df_cleaned.columns)}")
 
@@ -117,9 +133,9 @@ print("\n  Sample of cleaned data:")
 print(df_cleaned.head(10).to_string(index=False))
 
 # Save cleaned data
-df_cleaned.to_csv(final_output_csv, index=False)
+df_cleaned.to_csv(output_csv, index=False)
 
-print(f"\n✅ Cleaned data saved to: {final_output_csv}")
+print(f"\n✅ Cleaned data saved to: {output_csv}")
 print("\n" + "=" * 80)
 print("✨ CLEANING COMPLETE!")
 print("=" * 80)

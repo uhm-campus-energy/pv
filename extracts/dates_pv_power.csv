@@ -5,7 +5,7 @@ sensor_id,meter_name,customer,building_complex_name,resolution_per_hr,building_c
 4,frog2_pv,Frog Bldgs 1257B FROG 2,FROG 2,4,1257B,2021-07-01 00:00:00,2026-04-11 23:45:00,,,f,f
 5,gartley_pv,Gartley Hall,GARTLEY HALL,4,1015,2021-07-01 00:00:00,2026-03-24 23:45:00,,,f,f
 6,life_science_pv,Life Science Building,LIFE SCIENCES BUILDING,4,1263,2021-07-01 00:00:00,2025-02-03 23:45:00,2025-02-04 00:00:00,2026-03-24 23:00:00,t,f
-7,parking_phase2_pv,Parking Structure - Phase2a,LOWER CAMPUS PARKING STRUCTURE - PHASE II,4,1001A,2021-07-01 00:00:00,2026-03-24 23:45:00,,,f,f
+7,parking_phase2_pv,Parking Structure - Phase2a,LOWER CAMPUS PARKING STRUCTURE - PHASE II,4,1001A,2021-07-01 00:00:00,2026-08-06 23:45:00,,,f,f
 8,pbrc_pv,Pacific Biomedical Research Ctr (PBRC),PACIFIC BIOSCIENCE RESEARCH CENTER COMPLEX,4,1121_1195_1195AC,2023-08-11 11:30:00,2026-03-24 23:45:00,,,f,f
 9,law_clinic_pv,Law School Clinical Building,LAW SCHOOL CLINICAL BUILDING,4,1260,2021-07-01 00:00:00,2025-02-03 23:45:00,2025-02-04 00:00:00,2026-03-24 23:00:00,t,f
 10,sinclair_pv,Sinclair Library (decommissioned 2023),SINCLAIR LIBRARY AND ANNEXES,4,1133_1133AB,2021-07-01 00:00:00,2023-03-16 23:45:00,,,f,f
