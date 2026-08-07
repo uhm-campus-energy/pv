@@ -60,27 +60,6 @@ def read_one_csv(path):
     return df
 
 
-def detect_frequency(combined_df):
-    """
-    Infer the dominant timestamp interval from the combined dataframe.
-    Returns '15min' or '1h'.
-    """
-    sorted_dt = combined_df["datetime"].drop_duplicates().sort_values()
-    if len(sorted_dt) < 2:
-        return "unknown"
-
-    diffs = sorted_dt.diff().dropna()
-    median_diff = diffs.median()
-
-    minutes = median_diff.total_seconds() / 60
-    print(f"  Median timestamp interval: {minutes:.1f} minutes")
-
-    if minutes <= 20:
-        return "15min"
-    else:
-        return "1h"
-
-
 def get_cutoff_timestamp(dates_csv, meter, freq):
     """
     Look up the appropriate cutoff timestamp from dates_pv_power.csv.
@@ -188,10 +167,8 @@ def main():
     after = len(combined)
     print(f"Rows after row-level dedup: {after} (removed {before - after})")
 
-    # --- Step 5: Detect timestamp frequency ---
-    print("\nDetecting timestamp frequency...")
-    freq = detect_frequency(combined)
-    print(f"  Detected frequency: {freq}")
+    # --- Step 5: Timestamp frequency (data is known to be 1hr resolution) ---
+    freq = "1h"
 
     # --- Step 6: Look up cutoff and trim ---
     print(f"\nLooking up cutoff timestamp for meter '{meter_name}' (freq={freq})...")
