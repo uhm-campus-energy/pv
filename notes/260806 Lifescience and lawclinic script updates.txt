@@ -1,0 +1,16 @@
+Updated lifescience_solaredge.py and lawclinic_solaredge.py to match the parkingphase1_egauge.py conventions.
+
+Changes:
+- File paths now relative to project root: data/<name>/, outputs/, extracts/dates_pv_power.csv (was hardcoded Desktop paths).
+- Output column order: datetime, sensor_id, power_avg_kw, meter_name. Datetime formatted as YYYY-MM-DD HH:MM:SS.
+- Both meters are known 1hr resolution now, so freq is hardcoded to "1hr" (no more auto-detect).
+- Output filenames: life_science_pv_cleaned_<start>_<end>_1hr.csv and law_pv_cleaned_<start>_<end>_1hr.csv in outputs/.
+
+Raw file handling (both sites still export as ~20 separate per-inverter CSVs, unlike parkingphase1's single file):
+- Byte-identical duplicate exports are still moved to a duplicates/ subfolder before combining.
+- All source CSVs are combined into one row-deduped file and written to data/<name>/archive/ as <meter_name>_<start>_<end>_1hr.csv.
+- The original ~20 source files are then deleted from the input folder.
+
+Not yet run against real data - deletes the source files after archiving, so run manually and check outputs/ and archive/ before trusting for upload.
+
+lawclinic_solaredge.py note: output filename keeps the existing "law_pv_cleaned" prefix (not "law_clinic_pv_cleaned") to match the established upload path convention; the archived raw file still uses the full meter_name "law_clinic_pv".

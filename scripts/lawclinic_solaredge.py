@@ -1,100 +1,101 @@
-import os
-import glob
-import shutil
 import hashlib
+import shutil
 import pandas as pd
 from pathlib import Path
 
-# === Settings ===
-folder_path = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\lawschool"  # folder containing the Law Clinic SolarEdge CSV files
+# File paths (relative to project root)
+project_root = Path(__file__).resolve().parent.parent
+input_dir = project_root / "data" / "lawclinic_solaredge"
+archive_dir = input_dir / "archive"
+input_csvs = sorted(input_dir.glob("*.csv"))
+if not input_csvs:
+    raise FileNotFoundError(f"No CSVs found in {input_dir}")
+output_dir = project_root / "outputs"
+output_dir.mkdir(exist_ok=True)
+dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
 sensor_id_value = 9
 meter_name = "law_clinic_pv"
-dates_csv_path = r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\dates_pv_power.csv"
-# Save output to a top-level 'cleaned' folder (sibling to 'lawschool')
-output_dir = Path(r"C:\Users\EileenPeppard\Desktop\2026-03-24_PV_data\cleaned")
-output_filename = "law_pv_cleaned.csv"
+output_basename = "law_pv_cleaned"
+## when done upload to table from command line using folder on server, eg. \copy pv.pv_power (sensor_id,meter_name,datetime,power_avg_kw) from '/home/eileen/uploads_uhm/law_pv_cleaned.csv' CSV HEADER;
 
-# === Script === # This also divides the W by 1,000 to get kW
+
+print("=" * 80)
+print("CLEANING LAW CLINIC PV DATA")
+print("=" * 80)
+
+
 def read_one_csv(path):
-    df = pd.read_csv(
-        path,
-        header=None,
-        names=["datetime", "watts"],
-        encoding="utf-8-sig",
-        on_bad_lines="skip",
-    )
+    """Read a SolarEdge per-inverter export and sum inverter power (W) into kW."""
+    df = pd.read_csv(path, encoding="utf-8-sig", on_bad_lines="skip")
 
-    # Clean and convert types
-    df["datetime"] = df["datetime"].astype(str).str.strip()
-    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
-    df["watts"] = pd.to_numeric(df["watts"], errors="coerce")
+    # Identify datetime column (supports 'DateTime' or 'Date & Time')
+    dt_col = None
+    for c in df.columns:
+        if str(c).strip().lower() in ("datetime", "date & time"):
+            dt_col = c
+            break
+    if dt_col is None:
+        dt_col = df.columns[0]
 
-    # Drop rows with invalid values
-    df = df.dropna(subset=["datetime", "watts"])
+    inverter_cols = [c for c in df.columns if c != dt_col]
 
-    # Convert W → kW
-    df["power_avg_kw"] = df["watts"] / 1000.0
+    df[dt_col] = pd.to_datetime(df[dt_col].astype(str).str.strip(), errors="coerce")
+    df[inverter_cols] = df[inverter_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+    df = df.dropna(subset=[dt_col])
 
-    # Add sensor_id
-    df["sensor_id"] = sensor_id_value
-    df["meter_name"] = meter_name
+    df["power_avg_kw"] = df[inverter_cols].sum(axis=1) / 1000.0
+    df = df.rename(columns={dt_col: "datetime"})
 
-    # Keep only needed columns
-    df = df[["sensor_id", "meter_name", "datetime", "power_avg_kw"]]
-
-    return df
+    return df[["datetime", "power_avg_kw"]]
 
 
 def move_duplicate_files(csv_paths, folder):
-    """
-    Check for files with identical content (byte-for-byte duplicates).
-    Move duplicates to a 'duplicates' subfolder, keeping the first occurrence.
-    Returns the list of unique file paths.
-    """
+    """Move byte-identical duplicate exports to a 'duplicates' subfolder."""
     duplicates_dir = Path(folder) / "duplicates"
     seen_hashes = {}
     unique_paths = []
 
     for path in csv_paths:
-        with open(path, "rb") as f:
-            file_hash = hashlib.md5(f.read()).hexdigest()
-
+        file_hash = hashlib.md5(path.read_bytes()).hexdigest()
         if file_hash in seen_hashes:
             duplicates_dir.mkdir(parents=True, exist_ok=True)
-            dest = duplicates_dir / Path(path).name
+            dest = duplicates_dir / path.name
             if dest.exists():
-                stem = Path(path).stem
-                suffix = Path(path).suffix
-                dest = duplicates_dir / f"{stem}_dup{suffix}"
-            shutil.move(path, dest)
-            print(f"  ⚠ Duplicate of '{seen_hashes[file_hash]}' → moved to duplicates/: {Path(path).name}")
+                dest = duplicates_dir / f"{path.stem}_dup{path.suffix}"
+            shutil.move(str(path), dest)
+            print(f"  ⚠ Duplicate of '{seen_hashes[file_hash]}' → moved to duplicates/: {path.name}")
         else:
-            seen_hashes[file_hash] = Path(path).name
+            seen_hashes[file_hash] = path.name
             unique_paths.append(path)
 
     return unique_paths
 
 
-def detect_frequency(combined_df):
-    """
-    Infer the dominant timestamp interval from the combined dataframe.
-    Returns '15min' or '1h'.
-    """
-    sorted_dt = combined_df["datetime"].drop_duplicates().sort_values()
-    if len(sorted_dt) < 2:
-        return "unknown"
-    diffs = sorted_dt.diff().dropna()
-    median_diff = diffs.median()
-    minutes = median_diff.total_seconds() / 60
-    print(f"  Median timestamp interval: {minutes:.1f} minutes")
-    return "15min" if minutes <= 20 else "1h"
+# --- Check for byte-identical duplicate exports ---
+print(f"\nFound {len(input_csvs)} CSV file(s). Checking for duplicates...")
+input_csvs = move_duplicate_files(input_csvs, input_dir)
+print(f"  {len(input_csvs)} unique file(s) remaining after duplicate check.")
+
+# --- Load and combine all inverter export files ---
+parts = [read_one_csv(p) for p in input_csvs]
+before_dedup = sum(len(p) for p in parts)
+combined_raw = pd.concat(parts, ignore_index=True)
+combined_raw = combined_raw.sort_values("datetime").drop_duplicates().reset_index(drop=True)
+print(f"\n✓ Combined {len(input_csvs)} file(s) into {len(combined_raw)} row(s) "
+      f"(removed {before_dedup - len(combined_raw)} duplicate row(s))")
+
+# Add new columns with specified values
+df_cleaned = combined_raw.copy()
+df_cleaned["sensor_id"] = sensor_id_value
+df_cleaned["meter_name"] = meter_name
+
+# --- Timestamp frequency (data is known to be 1hr resolution) ---
+freq = "1hr"
+print(f"\nFrequency: {freq}")
 
 
+# --- Look up cutoff timestamp and trim ---
 def get_cutoff_timestamp(dates_csv, meter, freq):
-    """
-    Look up the appropriate cutoff timestamp from dates_pv_power.csv.
-    Returns a pandas Timestamp or None if not found.
-    """
     try:
         dates_df = pd.read_csv(dates_csv, encoding="utf-8-sig")
         dates_df.columns = [c.strip().strip('"') for c in dates_df.columns]
@@ -125,79 +126,55 @@ def get_cutoff_timestamp(dates_csv, meter, freq):
         return None
 
 
-def main():
-    csv_paths = sorted(glob.glob(os.path.join(folder_path, "*.csv")))
-    if not csv_paths:
-        print(f"No CSV files found in:\n  {folder_path}")
-        return
+print(f"\nLooking up cutoff timestamp for meter '{meter_name}' (freq={freq})...")
+cutoff = get_cutoff_timestamp(dates_csv_path, meter_name, freq)
 
-    # --- Step 1: Detect and move duplicate files ---
-    print(f"Found {len(csv_paths)} CSV file(s). Checking for duplicates...")
-    csv_paths = move_duplicate_files(csv_paths, folder_path)
-    print(f"  {len(csv_paths)} unique file(s) remaining after duplicate check.\n")
+if cutoff is not None:
+    before_trim = len(df_cleaned)
+    df_cleaned = df_cleaned[df_cleaned["datetime"] > cutoff].reset_index(drop=True)
+    after_trim = len(df_cleaned)
+    print(f"  Cutoff: {cutoff}  →  Kept rows after cutoff: {after_trim} (trimmed {before_trim - after_trim})")
+else:
+    print("  No trimming applied.")
 
-    # --- Step 2: Read and combine ---
-    parts = []
-    for p in csv_paths:
-        try:
-            df = read_one_csv(p)
-            parts.append(df)
-            print(f"✔ Processed: {os.path.basename(p)} → {len(df)} rows")
-        except Exception as e:
-            print(f"⚠ Skipped {os.path.basename(p)}: {e}")
+if df_cleaned.empty:
+    raise ValueError("No data remains after trimming.")
 
-    if not parts:
-        print("No valid rows found across files.")
-        return
+# Date range used for both the archived raw file and the output file
+start_date = df_cleaned["datetime"].min().strftime("%Y-%m-%d")
+end_date = df_cleaned["datetime"].max().strftime("%Y-%m-%d")
 
-    combined = pd.concat(parts, ignore_index=True)
+# --- Combine raw source files into one archived file, then remove the originals ---
+archive_dir.mkdir(parents=True, exist_ok=True)
+archive_csv = archive_dir / f"{meter_name}_{start_date}_{end_date}_{freq}.csv"
+combined_raw.to_csv(archive_csv, index=False)
+for path in input_csvs:
+    path.unlink()
+print(f"\n✓ Archived combined raw data to: {archive_csv.name}")
+print(f"✓ Removed {len(input_csvs)} processed source file(s) from {input_dir.name}/")
 
-    # --- Step 3: Sort by timestamp ---
-    combined = combined.sort_values("datetime").reset_index(drop=True)
-    print(f"\nCombined rows (pre-dedup): {len(combined)}")
+# Output file follows the same naming convention as the archived data file
+output_csv = output_dir / f"{output_basename}_{start_date}_{end_date}_{freq}.csv"
 
-    # --- Step 4: Remove duplicate rows ---
-    before = len(combined)
-    combined = combined.drop_duplicates()
-    after = len(combined)
-    print(f"Rows after row-level dedup: {after} (removed {before - after})")
+# --- Format datetime for output ---
+df_cleaned["datetime"] = df_cleaned["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # --- Step 5: Detect timestamp frequency ---
-    print("\nDetecting timestamp frequency...")
-    freq = detect_frequency(combined)
-    print(f"  Detected frequency: {freq}")
+print(f"✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
 
-    # --- Step 6: Look up cutoff and trim ---
-    print(f"\nLooking up cutoff timestamp for meter '{meter_name}' (freq={freq})...")
-    cutoff = get_cutoff_timestamp(dates_csv_path, meter_name, freq)
+# Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
+df_cleaned = df_cleaned[["datetime", "sensor_id", "power_avg_kw", "meter_name"]]
 
-    if cutoff is not None:
-        before_trim = len(combined)
-        combined = combined[combined["datetime"] > cutoff].reset_index(drop=True)
-        after_trim = len(combined)
-        print(f"  Cutoff: {cutoff}  →  Kept rows after cutoff: {after_trim} (trimmed {before_trim - after_trim})")
-    else:
-        print("  No trimming applied.")
+print(f"\n✓ Cleaned data: {df_cleaned.shape[0]} rows × {df_cleaned.shape[1]} columns")
+print(f"  New columns: {list(df_cleaned.columns)}")
 
-    if combined.empty:
-        print("\n⚠ No data remains after trimming. Output file not written.")
-        return
+# Show sample of cleaned data
+print("\n  Sample of cleaned data:")
+print(df_cleaned.head(10).to_string(index=False))
 
-    # --- Step 7: Save output ---
-    # Append _hr to filename if data is hourly
-    final_filename = output_filename.replace(".csv", "_hr.csv") if freq == "1h" else output_filename
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = str(output_dir / final_filename)
-    combined.to_csv(out_path, index=False, header=["sensor_id", "meter_name", "datetime", "power_avg_kw"])
+# Save cleaned data
+df_cleaned.to_csv(output_csv, index=False)
 
-    print("\n=== Done ===")
-    print(f" Files processed  : {len(csv_paths)}")
-    print(f" Rows before dedup: {before}")
-    print(f" Rows after dedup : {after}")
-    print(f" Frequency        : {freq}")
-    print(f" Cutoff applied   : {cutoff}")
-    print(f" Final rows       : {len(combined)}")
-    print(f" Output written   : {out_path}")
-
-if __name__ == "__main__":
-    main()
+print(f"\n✅ Cleaned data saved to: {output_csv}")
+print("\n" + "=" * 80)
+print("✨ CLEANING COMPLETE!")
+print("=" * 80)
