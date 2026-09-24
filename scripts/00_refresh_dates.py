@@ -1,30 +1,37 @@
 import subprocess
 
-# Database connection and export target
+# Database connection and export targets
 db_name = "uhm2023"
-export_path = "/home/campusenergy/shared/pv/extracts/dates_pv_power.csv"
-copy_command = (
-    f"\\copy (SELECT * FROM pv.dates_pv_power) TO '{export_path}' CSV HEADER;"
-)
+extracts_dir = "/home/campusenergy/shared/pv/extracts"
+views = ["dates_pv_power", "dates_monthly_kwh"]
 
 print("=" * 80)
-print("EXTRACTING pv.dates_pv_power FROM DATABASE")
+print("EXTRACTING VIEWS FROM DATABASE")
 print("=" * 80)
 
-result = subprocess.run(
-    ["psql", db_name, "-c", copy_command],
-    capture_output=True,
-    text=True,
-)
+for view in views:
+    export_path = f"{extracts_dir}/{view}.csv"
+    copy_command = f"\\copy (SELECT * FROM pv.{view}) TO '{export_path}' CSV HEADER;"
 
-if result.stdout.strip():
-    print(result.stdout)
+    print(f"\nExtracting pv.{view}...")
 
-if result.returncode != 0:
-    print(result.stderr)
-    raise RuntimeError(f"psql export failed with exit code {result.returncode}")
+    result = subprocess.run(
+        ["psql", db_name, "-c", copy_command],
+        capture_output=True,
+        text=True,
+    )
 
-print(f"\n✅ Extracted pv.dates_pv_power to: {export_path}")
+    if result.stdout.strip():
+        print(result.stdout)
+
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError(
+            f"psql export of pv.{view} failed with exit code {result.returncode}"
+        )
+
+    print(f"✅ Extracted pv.{view} to: {export_path}")
+
 print("\n" + "=" * 80)
 print("✨ EXTRACTION COMPLETE!")
 print("=" * 80)
