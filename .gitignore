@@ -1,0 +1,8 @@
+# Data: keep the subfolder structure (via .gitkeep), ignore the files inside
+data/**
+!data/*/
+!data/*/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
