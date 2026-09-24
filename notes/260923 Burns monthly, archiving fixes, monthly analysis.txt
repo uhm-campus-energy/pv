@@ -1,0 +1,74 @@
+2026-09-23 — Where I left off
+
+DONE TODAY
+
+1. 00_refresh_dates.py
+- Now extracts two views: pv.dates_pv_power and pv.dates_monthly_kwh (-> extracts/dates_monthly_kwh.csv).
+
+2. burns_monthly_kwh.py (new)
+- Reads the one PDF or Excel file in data/burns_monthly/.
+- Finds the "Fiscal Year 2026" table and takes the "PV kWh" column (Oct 2025 - Sep 2026).
+- Output columns: month (YYYY-MM-01), meter_name (burns_pv), kwh.
+- Keeps only months after end_monthly_kwh for burns_pv in dates_monthly_kwh.csv.
+- Blank months (e.g. September 2026 in the current PDF) are skipped.
+- Tested on the PDF: wrote outputs/burns_pv_monthly_kwh_2026-03-01_2026-08-01.csv (Mar-Aug 2026).
+- fiscal_year = 2026 is set at the top of the script - change it for the next fiscal year.
+- Excel files need openpyxl installed.
+
+3. 01_upload_outputs.py
+- Also uploads outputs/*_monthly_kwh_*.csv to pv.monthly (month, meter_name, kwh).
+- burns_pv -> data/burns_monthly, so the Burns PDF/Excel is archived after upload.
+- Archiving now includes .csv, .pdf, .xlsx and .xls files.
+- No longer overwrites an archived file with the same name (adds _2, _3, ...).
+
+4. .gitignore (new)
+- data/ subfolders are kept (each has a .gitkeep), but their files and archive/ folders are not committed.
+- Also ignored: __pycache__, extracts/monthly_analysis_*.csv, analysis/.
+- Not ignored yet: outputs/ and extracts/ (dates files). Decide whether to ignore those too.
+
+5. Checked the database dates against the raw files in data/
+- Already uploaded but not archived: bachman, dance, frog1, frog2, gym1,2, pbrc, wrc.
+  Moved those 26 raw files into each folder's archive/.
+- Not uploaded yet: life_science_pv and law_clinic_pv hourly (2026-03-25 -> 2026-08-06),
+  and the Burns monthly file (Mar-Aug 2026).
+
+6. lifescience_solaredge.py and lawclinic_solaredge.py
+- Replaces the 260806 note: these scripts no longer write a combined processed file to archive/ or delete the raw files.
+- They now rename each raw export by date range (e.g. lifescience_solaredge_2026-07-24_2026-07-30_1hr.csv)
+  and leave it in place. 01_upload_outputs.py archives the raw files after a successful upload.
+- The output is saved before anything happens to the raw files.
+- Fixed a pandas warning in the dates lookup.
+- Tested both on copies of the data: 3,240 hourly rows each, no gaps, values look right.
+
+7. 02_monthly_analysis.py (new)
+- Runs 00_refresh_dates.py, then downloads pv.pv_power and pv.pv_power_hr for months after
+  end_monthly_kwh, through the last complete month.
+- 15-min data: expects 4 readings/hour from sunrise to sunset.
+  Sunrise and sunset are calculated for Honolulu for each day, and only 15-min slots
+  fully between them are expected.
+- Hourly data: expects 24 readings/day. Also reports how many missing hours were in daylight.
+- Output: printed report + analysis/monthly_completeness.csv and analysis/monthly_missing_gaps.csv.
+- --no-refresh re-runs the analysis on the last downloaded files without connecting to the database.
+- Tested with sample data. Not yet run against the database.
+- Burns is skipped (monthly report). gyms1,2_pv is not in dates_monthly_kwh, so it isn't checked.
+- Running it on the laptop fails: psql isn't installed there and the export paths are server paths.
+
+NEXT STEPS
+
+1. On the server, run in order:
+   - lifescience_solaredge.py
+   - lawclinic_solaredge.py
+   - 01_upload_outputs.py (uploads both hourly files and the Burns monthly file, archives the raw files, refreshes dates)
+2. Check extracts after the upload: life_science_pv and law_clinic_pv should end 2026-08-06 23:00,
+   and burns_pv end_monthly_kwh should be 2026-08-01.
+3. Run 02_monthly_analysis.py on the server. Review the "WHAT IS MISSING" section and decide what to estimate.
+4. Download new data for all meters - everything stops around 2026-08-06.
+5. Decisions still open:
+   - Hourly table name: 02 uses pv.pv_power_hr (same as 01). Confirm it isn't pv.pv_power_hour.
+   - Where should gyms1,2_pv start for the monthly analysis (first data is Jan 2025)?
+   - Is the daylight rule OK (sunrise-sunset, Hawaii local time), or use a fixed window or a buffer?
+   - Should 00/01/02 also work from the laptop? Needs psql, the database host/user, and the export paths changed.
+   - Have cleaning scripts record exactly which raw files they used, so 01 archives only those
+     (and archives them even when there was nothing new to upload)?
+   - Ignore outputs/ and extracts/ in git too?
+   - From 260805: 01 upload error summary (console only vs log file) - still not decided.

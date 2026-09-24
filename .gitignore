@@ -3,6 +3,10 @@ data/**
 !data/*/
 !data/*/.gitkeep
 
+# Monthly analysis: downloaded readings and generated reports
+extracts/monthly_analysis_*.csv
+analysis/
+
 # Python
 __pycache__/
 *.pyc
