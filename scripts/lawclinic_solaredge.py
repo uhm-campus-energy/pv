@@ -6,7 +6,6 @@ from pathlib import Path
 # File paths (relative to project root)
 project_root = Path(__file__).resolve().parent.parent
 input_dir = project_root / "data" / "lawclinic_solaredge"
-archive_dir = input_dir / "archive"
 input_csvs = sorted(input_dir.glob("*.csv"))
 if not input_csvs:
     raise FileNotFoundError(f"No CSVs found in {input_dir}")
@@ -71,6 +70,23 @@ def move_duplicate_files(csv_paths, folder):
     return unique_paths
 
 
+def rename_raw_files(csv_paths, parts, folder, freq):
+    """Rename each raw export to <folder>_<start-date>_<end-date>_<freq>.csv (left in place for 01 to archive)."""
+    for path, part in zip(csv_paths, parts):
+        if part.empty:
+            continue
+        start = part["datetime"].min().strftime("%Y-%m-%d")
+        end = part["datetime"].max().strftime("%Y-%m-%d")
+        new_path = folder / f"{folder.name}_{start}_{end}_{freq}.csv"
+        n = 2
+        while new_path.exists() and new_path != path:
+            new_path = folder / f"{folder.name}_{start}_{end}_{freq}_{n}.csv"
+            n += 1
+        if new_path != path:
+            path.rename(new_path)
+            print(f"  ↳ Renamed {path.name} → {new_path.name}")
+
+
 # --- Check for byte-identical duplicate exports ---
 print(f"\nFound {len(input_csvs)} CSV file(s). Checking for duplicates...")
 input_csvs = move_duplicate_files(input_csvs, input_dir)
@@ -99,7 +115,7 @@ def get_cutoff_timestamp(dates_csv, meter, freq):
     try:
         dates_df = pd.read_csv(dates_csv, encoding="utf-8-sig")
         dates_df.columns = [c.strip().strip('"') for c in dates_df.columns]
-        for col in dates_df.select_dtypes(include="object").columns:
+        for col in dates_df.columns:
             dates_df[col] = dates_df[col].astype(str).str.strip().str.strip('"')
 
         row = dates_df[dates_df["meter_name"] == meter]
@@ -140,26 +156,16 @@ else:
 if df_cleaned.empty:
     raise ValueError("No data remains after trimming.")
 
-# Date range used for both the archived raw file and the output file
+# Date range used for the output file
 start_date = df_cleaned["datetime"].min().strftime("%Y-%m-%d")
 end_date = df_cleaned["datetime"].max().strftime("%Y-%m-%d")
 
-# --- Combine raw source files into one archived file, then remove the originals ---
-archive_dir.mkdir(parents=True, exist_ok=True)
-archive_csv = archive_dir / f"{meter_name}_{start_date}_{end_date}_{freq}.csv"
-combined_raw.to_csv(archive_csv, index=False)
-for path in input_csvs:
-    path.unlink()
-print(f"\n✓ Archived combined raw data to: {archive_csv.name}")
-print(f"✓ Removed {len(input_csvs)} processed source file(s) from {input_dir.name}/")
-
-# Output file follows the same naming convention as the archived data file
 output_csv = output_dir / f"{output_basename}_{start_date}_{end_date}_{freq}.csv"
 
 # --- Format datetime for output ---
 df_cleaned["datetime"] = df_cleaned["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-print(f"✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
+print(f"\n✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
 
 # Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
 df_cleaned = df_cleaned[["datetime", "sensor_id", "power_avg_kw", "meter_name"]]
@@ -175,6 +181,10 @@ print(df_cleaned.head(10).to_string(index=False))
 df_cleaned.to_csv(output_csv, index=False)
 
 print(f"\n✅ Cleaned data saved to: {output_csv}")
+
+# --- Rename raw source files by date range (01_upload_outputs.py archives them after upload) ---
+print(f"\nRenaming raw source files in {input_dir.name}/...")
+rename_raw_files(input_csvs, parts, input_dir, freq)
 print("\n" + "=" * 80)
 print("✨ CLEANING COMPLETE!")
 print("=" * 80)

@@ -82,8 +82,13 @@ def archive_input_files(folder_name):
     for input_file in folder.iterdir():
         if not input_file.is_file() or input_file.suffix.lower() not in INPUT_SUFFIXES:
             continue
+        # Never overwrite an earlier archived file with the same name
         destination = archive_dir / input_file.name
-        input_file.replace(destination)
+        n = 2
+        while destination.exists():
+            destination = archive_dir / f"{input_file.stem}_{n}{input_file.suffix}"
+            n += 1
+        input_file.rename(destination)
         print(f"  ↳ Archived {folder_name}/{input_file.name}")
 
 
