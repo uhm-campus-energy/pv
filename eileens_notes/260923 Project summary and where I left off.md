@@ -1,6 +1,6 @@
 # PV project: script summary and where I left off
 
-*Written 2026-09-23 from the repo's contents (scripts, notes/, data/ folders, git log). Last commit: "more updates" (Aug 6, 2026).*
+*Written 2026-09-23 from the repo's contents (scripts, notes, data/ folders, git log). Last commit: "more updates" (Aug 6, 2026).*
 
 ---
 
@@ -70,7 +70,7 @@ These scripts all use the same template. Each one expects exactly **one** CSV in
 ### Done (Aug 5–6, 2026)
 - Moved the code onto the server and switched every script to project-relative paths and the standard output format and filenames.
 - Built the upload script (`01_upload_outputs.py`), which also archives inputs and refreshes the dates extract.
-- Rewrote Life Science and Law Clinic to match the Parking Phase 1 conventions (see `notes/260806 ...txt`).
+- Rewrote Life Science and Law Clinic to match the Parking Phase 1 conventions (see `260806 Lifescience and lawclinic script updates.txt`).
 - Downloaded new raw data for every site, covering roughly late March through Aug 6, 2026.
 - **Uploaded** (the raw files are in `archive/`):
   - Parking Phase 1: through 2026-08-04
@@ -92,7 +92,7 @@ The raw files are still in `data/<site>/` under their original download names, a
 There's no script for it yet. It is **monthly energy (kWh)**, not interval power (kW), so it doesn't fit `pv_power` or `pv_power_hr` as they are. Decide where monthly totals should go (a new table?) before writing the script.
 
 ### Open decisions and things to check
-1. **Upload error summary** (`notes/260805 Upload error summary.txt`): still undecided. Failed uploads currently print to the console and are skipped; nothing is collected or logged. The note recommends a "FAILED UPLOADS" block printed at the end, plus a log file if the script ever runs unattended.
+1. **Upload error summary** (`260805 Upload error summary.txt`): still undecided. Failed uploads currently print to the console and are skipped; nothing is collected or logged. The note recommends a "FAILED UPLOADS" block printed at the end, plus a log file if the script ever runs unattended.
 2. **Gartley end date**: Gartley's raw file is in `archive/`, which means the upload reported success. But the local `extracts/dates_pv_power.csv` still shows `gartley_pv` ending 2026-03-24. Check the DB, or re-run `00_refresh_dates.py` and pull the fresh extract.
 3. **eGauge timestamps off the 15-min grid**: Frog 2, Bachman and Gyms exports have minute offsets (e.g. `11:16`, `23:32`, `23:33`) instead of `:00/:15/:30/:45`. The scripts don't round them. Check whether that matters for the DB or for later analysis.
 4. **The local dates extract is from Aug 6.** Refresh it on the server before cleaning, so the cutoffs match what's actually in the DB.
