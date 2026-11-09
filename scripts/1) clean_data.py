@@ -46,10 +46,10 @@ SITES = {
                           time_column=EGAUGE_TIME, power_column="Generation [kW]",
                           flip_sign=False, output_name="parkingphase1_pv"),
     "frog1": dict(folder="frog1_egauge", meter_name="frog1_pv",
-                  time_column=EGAUGE_TIME, power_column="PV [kW]", 
+                  time_column=EGAUGE_TIME, power_column="pv [kW]", 
                   flip_sign=True, output_name="frog1_pv"),
     "frog2": dict(folder="frog2_egauge", meter_name="frog2_pv",
-                  time_column=EGAUGE_TIME, power_column="PV [kW]",
+                  time_column=EGAUGE_TIME, power_column="pv [kW]",
                   flip_sign=True, output_name="frog2_pv"),
 
     # the power column changed name from Production meter active power Kilowatts to Production meter active power (kW)

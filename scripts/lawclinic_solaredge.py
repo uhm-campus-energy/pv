@@ -5,7 +5,7 @@ from pathlib import Path
 
 # File paths (relative to project root)
 project_root = Path(__file__).resolve().parent.parent
-input_dir = project_root / "data" / "lawclinic_solaredge"
+input_dir = project_root / "input_data" / "lawclinic_solaredge"
 input_csvs = sorted(input_dir.glob("*.csv"))
 if not input_csvs:
     raise FileNotFoundError(f"No CSVs found in {input_dir}")
@@ -14,7 +14,7 @@ output_dir.mkdir(exist_ok=True)
 dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
 sensor_id_value = 9
 meter_name = "law_clinic_pv"
-output_basename = "law_pv_cleaned"
+output_basename = "law_clinic_pv_cleaned"
 ## when done upload to table from command line using folder on server, eg. \copy pv.pv_power (sensor_id,meter_name,datetime,power_avg_kw) from '/home/eileen/uploads_uhm/law_pv_cleaned.csv' CSV HEADER;
 
 
@@ -85,6 +85,26 @@ def rename_raw_files(csv_paths, parts, folder, freq):
         if new_path != path:
             path.rename(new_path)
             print(f"  ↳ Renamed {path.name} → {new_path.name}")
+
+def merge_raw_files(csv_paths, combined, folder, freq):
+    """Write one merged file named by date range, and tuck the originals into source_files/."""
+    start = combined["datetime"].min().strftime("%Y-%m-%d")
+    end = combined["datetime"].max().strftime("%Y-%m-%d")
+    merged_path = folder / f"{folder.name}_{start}_{end}_{freq}.csv"
+
+    # Write the merged file first, so nothing is lost if a later step fails
+    out = combined.copy()
+    out["datetime"] = out["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    out.to_csv(merged_path, index=False)
+    print(f"  ✓ Merged {len(csv_paths)} file(s) → {merged_path.name}")
+
+    # Move originals out of the way (the upload script only sees the merged file)
+    src_dir = folder / "source_files"
+    src_dir.mkdir(exist_ok=True)
+    for p in csv_paths:
+        if p == merged_path:
+            continue
+        shutil.move(str(p), src_dir / p.name)
 
 
 # --- Check for byte-identical duplicate exports ---
@@ -182,9 +202,9 @@ df_cleaned.to_csv(output_csv, index=False)
 
 print(f"\n✅ Cleaned data saved to: {output_csv}")
 
-# --- Rename raw source files by date range (01_upload_outputs.py archives them after upload) ---
-print(f"\nRenaming raw source files in {input_dir.name}/...")
-rename_raw_files(input_csvs, parts, input_dir, freq)
+# --- Merge raw source files by date range (01_upload_outputs.py archives them after upload) ---
+print(f"\nMerging raw source files in {input_dir.name}/...")
+merge_raw_files(input_csvs, combined_raw, input_dir, freq)
 print("\n" + "=" * 80)
 print("✨ CLEANING COMPLETE!")
 print("=" * 80)

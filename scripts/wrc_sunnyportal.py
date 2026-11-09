@@ -6,7 +6,7 @@ import pandas as pd
 
 # === SETTINGS (paths relative to project root) ===
 project_root = Path(__file__).resolve().parent.parent
-input_dir = project_root / "data" / "wrc_sunnyportal"
+input_dir = project_root / "input_data" / "wrc_sunnyportal"
 output_dir = project_root / "outputs"
 output_dir.mkdir(exist_ok=True)
 dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"

@@ -3,7 +3,7 @@ from pathlib import Path
 
 # File paths (relative to project root)
 project_root = Path(__file__).resolve().parent.parent
-input_dir = project_root / "data" / "burns_monthly"
+input_dir = project_root / "input_data" / "burns_monthly"
 input_files = [
     f for f in input_dir.iterdir()
     if f.is_file() and f.suffix.lower() in (".pdf", ".xlsx", ".xls")
