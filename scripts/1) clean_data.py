@@ -36,33 +36,33 @@ ALSOENERGY_TIME = "Site Time"
 #   flip_sign:    True if the export reports generation as negative
 #   output_name:  prefix of the cleaned file in outputs/
 SITES = {
-    "bachman": dict(folder="bachman_egauge", meter_name="bachman_pv", sensor_id=14,
+    "bachman": dict(folder="bachman_egauge", meter_name="bachman_pv",
                     time_column=EGAUGE_TIME, power_column="Generation [kW]",
                     flip_sign=False, output_name="bachman_pv"),
-    "gym": dict(folder="gym1,2_egauge", meter_name="gyms1,2_pv", sensor_id=13,
+    "gym": dict(folder="gym1,2_egauge", meter_name="gyms1,2_pv",
                 time_column=EGAUGE_TIME, power_column="Generation [kW]",
                 flip_sign=False, output_name="gyms_1_2_pv"),
-    "parkingphase1": dict(folder="parkingphase1_egauge", meter_name="parking_phase1_pv", sensor_id=12,
+    "parkingphase1": dict(folder="parkingphase1_egauge", meter_name="parking_phase1_pv",
                           time_column=EGAUGE_TIME, power_column="Generation [kW]",
                           flip_sign=False, output_name="parkingphase1_pv"),
-    "frog1": dict(folder="frog1_egauge", meter_name="frog1_pv", sensor_id=3,
-                  time_column=EGAUGE_TIME, power_column="pv [kW]",
+    "frog1": dict(folder="frog1_egauge", meter_name="frog1_pv",
+                  time_column=EGAUGE_TIME, power_column="PV [kW]", 
                   flip_sign=True, output_name="frog1_pv"),
-    "frog2": dict(folder="frog2_egauge", meter_name="frog2_pv", sensor_id=4,
+    "frog2": dict(folder="frog2_egauge", meter_name="frog2_pv",
                   time_column=EGAUGE_TIME, power_column="PV [kW]",
                   flip_sign=True, output_name="frog2_pv"),
 
     # the power column changed name from Production meter active power Kilowatts to Production meter active power (kW)
-    "dancestudio": dict(folder="dancestudio_alsoenergy", meter_name="dance_pv", sensor_id=1,
+    "dancestudio": dict(folder="dancestudio_alsoenergy", meter_name="dance_pv",
                         time_column=ALSOENERGY_TIME, power_column="Production meter active power (kW)",
                         flip_sign=False, output_name="dance_pv"),
-    "parkingphase2": dict(folder="parkingphase2_alsoenergy", meter_name="parking_phase2_pv", sensor_id=7,
+    "parkingphase2": dict(folder="parkingphase2_alsoenergy", meter_name="parking_phase2_pv",
                           time_column=ALSOENERGY_TIME, power_column="PV Inverter active power (kW)",
                           flip_sign=False, output_name="parkingphase2_pv"),
-    "gartley": dict(folder="gartley_alsoenergy", meter_name="gartley_pv", sensor_id=5,
+    "gartley": dict(folder="gartley_alsoenergy", meter_name="gartley_pv",
                     time_column=ALSOENERGY_TIME, power_column="PV Inverter active power (kW)",
                     flip_sign=False, output_name="gartley_pv"),
-    "pbrc": dict(folder="pbrc_alsoenergy", meter_name="pbrc_pv", sensor_id=8,
+    "pbrc": dict(folder="pbrc_alsoenergy", meter_name="pbrc_pv",
                  time_column=ALSOENERGY_TIME, power_column="PV Inverter active power (kW)",
                  flip_sign=False, output_name="pbrc_pv"),
 
@@ -165,7 +165,6 @@ def clean_site(site):
     })
 
     # Add new columns with specified values
-    df_cleaned['sensor_id'] = site["sensor_id"]
     df_cleaned['meter_name'] = meter_name
 
     if site["flip_sign"]:
@@ -217,8 +216,8 @@ def clean_site(site):
     df_cleaned['datetime'] = df_cleaned['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     print(f"\n✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
 
-    # Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
-    df_cleaned = df_cleaned[['datetime', 'sensor_id', 'power_avg_kw', 'meter_name']]
+    # Reorder columns: datetime, power_avg_kw, meter_name
+    df_cleaned = df_cleaned[['datetime', 'power_avg_kw', 'meter_name']]
 
     print(f"\n✓ Cleaned data: {df_cleaned.shape[0]} rows × {df_cleaned.shape[1]} columns")
     print("\n  Sample of cleaned data:")

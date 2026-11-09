@@ -23,6 +23,14 @@ TABLE_BY_FREQ = {
     "1hr": "pv.pv_power_hr",
 }
 
+# Staging table each destination table is loaded through (created automatically if missing).
+# Each file is copied into the staging table first, checked, then inserted into the real table
+# with ON CONFLICT (datetime, meter_name) DO NOTHING, so re-uploading rows that already exist is harmless.
+STAGING_TABLE = {
+    "pv.pv_power": "pv.pv_power_staging",
+    "pv.pv_power_hr": "pv.pv_power_hr_staging",
+}
+
 # meter_name (as written in the cleaned CSV) -> data subfolder name
 METER_TO_FOLDER = {
     "dance_pv": "dancestudio_alsoenergy",
@@ -40,7 +48,7 @@ METER_TO_FOLDER = {
     "burns_pv": "burns_monthly",
 }
 
-POWER_COLUMNS = "datetime, sensor_id, power_avg_kw, meter_name"
+POWER_COLUMNS = "datetime, power_avg_kw, meter_name"
 
 # Monthly kWh outputs (e.g. burns_pv_monthly_kwh_<start>_<end>.csv)
 MONTHLY_PATTERN = "*_monthly_kwh_*.csv"
@@ -76,6 +84,75 @@ def upload_file(csv_path, table, columns):
     return True
 
 
+def stage_and_insert(csv_path, table, staging, columns):
+    """Load a cleaned CSV into the staging table, then insert new rows into `table`.
+
+    Everything runs in one psql session inside one transaction, so if any step fails
+    nothing is changed and the staging table is left as it was.
+    """
+    remote_path = f"{remote_outputs_dir}/{csv_path.name}"
+    sql = f"""
+BEGIN;
+CREATE TABLE IF NOT EXISTS {staging} (
+    datetime timestamp without time zone,
+    power_avg_kw double precision,
+    meter_name varchar
+);
+TRUNCATE {staging};
+\\copy {staging}({columns}) FROM '{remote_path}' CSV HEADER
+DO $$
+DECLARE bad_meters text;
+BEGIN
+    SELECT string_agg(DISTINCT s.meter_name, ', ') INTO bad_meters
+    FROM {staging} s
+    LEFT JOIN pv.pv_info i ON i.meter_name = s.meter_name
+    WHERE i.meter_name IS NULL;
+    IF bad_meters IS NOT NULL THEN
+        RAISE EXCEPTION 'meter_name not found in pv.pv_info: %', bad_meters;
+    END IF;
+END $$;
+WITH ins AS (
+    INSERT INTO {table} ({columns})
+    SELECT {columns} FROM {staging}
+    ON CONFLICT (datetime, meter_name) DO NOTHING
+    RETURNING 1
+)
+SELECT (SELECT count(*) FROM {staging}) AS rows_in_file,
+       (SELECT count(*) FROM {staging} s JOIN {table} t
+            ON t.datetime = s.datetime AND t.meter_name = s.meter_name) AS already_in_table,
+       (SELECT count(*) FROM ins) AS inserted;
+COMMIT;
+"""
+
+    result = subprocess.run(
+        ["psql", "-X", "-q", "-t", "-A", "-F", "|", "-v", "ON_ERROR_STOP=1", "-d", db_name, "-f", "-"],
+        input=sql,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print(result.stderr)
+        print(f"❌ Upload failed for {csv_path.name} (exit code {result.returncode}) — nothing was changed")
+        return False
+
+    try:
+        last_line = [line for line in result.stdout.splitlines() if line.strip()][-1]
+        rows_in_file, already_in_table, inserted = (int(x) for x in last_line.split("|"))
+    except (IndexError, ValueError):
+        print(result.stdout)
+        print(f"⚠ Uploaded {csv_path.name} to {table}, but could not read the row counts above")
+        return True
+
+    print(f"✅ Uploaded {csv_path.name} to {table} via {staging}: "
+          f"{rows_in_file} rows in file, {already_in_table} already in table, {inserted} inserted")
+    if already_in_table:
+        print(f"  ⚠ {already_in_table} rows were already in {table} and were skipped")
+    if inserted + already_in_table != rows_in_file:
+        print(f"  ⚠ {rows_in_file - inserted - already_in_table} rows were duplicated within the file and skipped")
+    return True
+
+
 def get_meter_name(csv_path):
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
         row = next(csv.DictReader(f))
@@ -108,8 +185,13 @@ def archive_input_files(folder_name):
         print(f"  ⚠ No raw files found in input_data/{folder_name}/ — nothing to archive.")
 
 
-def upload_and_archive(csv_path, table, columns):
-    if not upload_file(csv_path, table, columns):
+def upload_and_archive(csv_path, table, columns, staging=None):
+    # With a staging table the file is loaded through it; without one it is copied straight in
+    if staging:
+        uploaded = stage_and_insert(csv_path, table, staging, columns)
+    else:
+        uploaded = upload_file(csv_path, table, columns)
+    if not uploaded:
         return False
 
     meter_name = get_meter_name(csv_path)
@@ -134,7 +216,7 @@ for freq, table in TABLE_BY_FREQ.items():
     matches = sorted(outputs_dir.glob(f"*_{freq}.csv"))
     print(f"\nFound {len(matches)} file(s) for {freq} → {table}")
     for csv_path in matches:
-        if upload_and_archive(csv_path, table, POWER_COLUMNS):
+        if upload_and_archive(csv_path, table, POWER_COLUMNS, staging=STAGING_TABLE[table]):
             any_success = True
 
 matches = sorted(outputs_dir.glob(MONTHLY_PATTERN))
