@@ -10,7 +10,7 @@ input_dir = project_root / "input_data" / "wrc_sunnyportal"
 output_dir = project_root / "outputs"
 output_dir.mkdir(exist_ok=True)
 dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
-SENSOR_ID = 11
+# SENSOR_ID = 11
 DAY_FIRST = True  # <-- we parse as DD/MM (e.g., 04/02 = 4 Feb)
 
 FILE_RE = re.compile(
@@ -25,7 +25,7 @@ def year_from_filename(fname: str) -> Optional[int]:
 def clean_cell(s: Optional[str]) -> str:
     if s is None:
         return ""
-    s = s.replace(" ", " ")  # NBSP -> space
+    s = s.replace("\u00a0", " ")  # NBSP -> space
     s = s.strip()
     if s.startswith("="):
         s = s[1:].strip()
@@ -127,6 +127,28 @@ def move_duplicate_files(folder: Path) -> List[str]:
     return unique_paths
 
 
+def merge_raw_files(csv_paths, combined, folder, freq):
+    """Write one merged file named by date range, and tuck the originals into source_files/."""
+    start = combined["datetime"].min().strftime("%Y-%m-%d")
+    end = combined["datetime"].max().strftime("%Y-%m-%d")
+    merged_path = folder / f"{folder.name}_{start}_{end}_{freq}.csv"
+
+    # Write the merged file first, so nothing is lost if a later step fails
+    out = combined.copy()
+    out["datetime"] = out["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    out.to_csv(merged_path, index=False)
+    print(f"  ✓ Merged {len(csv_paths)} file(s) → {merged_path.name}")
+
+    # Move originals out of the way (the upload script only sees the merged file)
+    src_dir = folder / "source_files"
+    src_dir.mkdir(exist_ok=True)
+    for p in csv_paths:
+        if p == merged_path:
+            continue
+        shutil.move(str(p), src_dir / p.name)
+    print(f"  ✓ Moved {len(csv_paths)} original file(s) into {src_dir.name}/")
+
+
 def detect_frequency(df: pd.DataFrame) -> str:
     """Infer the dominant timestamp interval. Returns '15min' or '1hr'."""
     sorted_dt = df["datetime"].drop_duplicates().sort_values()
@@ -198,10 +220,10 @@ for path in unique_paths:
             if dt is None:
                 continue
             kw = parse_kw(row[1] if len(row) > 1 else "")
-            rows.append({"sensor_id": SENSOR_ID, "meter_name": meter_name, "datetime": dt, "power_avg_kw": kw})
+            rows.append({"meter_name": meter_name, "datetime": dt, "power_avg_kw": kw})
 
 # === Step 3: Build DataFrame and sort by timestamp ===
-df = pd.DataFrame(rows, columns=["sensor_id", "meter_name", "datetime", "power_avg_kw"])
+df = pd.DataFrame(rows, columns=["meter_name", "datetime", "power_avg_kw"])
 if df.empty:
     print("⚠ No valid rows found. Output file not written.")
 else:
@@ -216,6 +238,9 @@ else:
     df = df.drop_duplicates()
     after = len(df)
     print(f"Rows after row-level dedup: {after} (removed {before - after})")
+
+    # Keep an untrimmed copy of the combined data — its min/max dates name the merged raw file
+    combined_raw = df[["datetime", "power_avg_kw"]].copy()
 
     # Nighttime hours have no reading in the source data, so this feed has
     # natural gaps in the timeline — that's expected and left as-is (no
@@ -246,8 +271,8 @@ else:
         end_date = df["datetime"].max().strftime("%Y-%m-%d")
         df["datetime"] = df["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        # Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
-        df = df[["datetime", "sensor_id", "power_avg_kw", "meter_name"]]
+        # Reorder columns: datetime, power_avg_kw, meter_name
+        df = df[["datetime", "power_avg_kw", "meter_name"]]
 
         output_csv = output_dir / f"warrior_pv_cleaned_{start_date}_{end_date}_{freq}.csv"
         df.to_csv(output_csv, index=False)
@@ -260,3 +285,8 @@ else:
         print(f" Cutoff applied   : {cutoff}")
         print(f" Final rows       : {len(df)}")
         print(f"✅ Wrote {len(df)} rows to {output_csv}")
+
+        # === Step 8: Merge raw source files by date range ===
+        # (2) upload_outputs.py archives the merged file after upload and deletes source_files/
+        print(f"\nMerging raw source files in {input_dir.name}/...")
+        merge_raw_files(unique_paths, combined_raw, input_dir, freq)

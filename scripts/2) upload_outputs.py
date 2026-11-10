@@ -2,6 +2,7 @@ import csv
 import subprocess
 import sys
 from pathlib import Path
+import shutil
 
 # archive_naming.py lives in scripts/move_old_archived_data/
 sys.path.insert(0, str(Path(__file__).resolve().parent / "move_old_archived_data"))
@@ -57,6 +58,11 @@ MONTHLY_COLUMNS = "month, meter_name, kwh"
 
 # Input file types moved to the archive after a successful upload
 INPUT_SUFFIXES = (".csv", ".pdf", ".xlsx", ".xls")
+
+# Subfolders inside each input_data/<site>/ folder that are deleted (along with
+# everything in them) after a successful upload, e.g. input_data/lifescience_solaredge/source_files.
+# Only folders named here are removed — add more names to the list if needed.
+SUBFOLDERS_TO_DELETE = ("source_files",)
 
 
 def upload_file(csv_path, table, columns):
@@ -158,6 +164,20 @@ def get_meter_name(csv_path):
         row = next(csv.DictReader(f))
         return row["meter_name"]
 
+def delete_leftover_subfolders(folder):
+    # Removes folders listed in SUBFOLDERS_TO_DELETE (and all files inside them) from input_data/<site>/
+    for name in SUBFOLDERS_TO_DELETE:
+        subfolder = folder / name
+        if not subfolder.is_dir():
+            continue
+        n_files = sum(1 for p in subfolder.rglob("*") if p.is_file())
+        try:
+            shutil.rmtree(subfolder)
+        except OSError as e:  # e.g. file open in Excel or locked by OneDrive
+            print(f"  ⚠ Could not delete {folder.name}/{name}/: {e}")
+            print(f"    Delete it by hand before cleaning this site again.")
+            continue
+        print(f"  ↳ Deleted {folder.name}/{name}/ ({n_files} file(s) inside)")
 
 def archive_input_files(folder_name):
     # input_data/<folder>/<file> -> data_archive/<site>/<site>_<start>_<end>_<freq>.csv
@@ -183,6 +203,9 @@ def archive_input_files(folder_name):
         print(f"  ↳ Archived {folder_name}/{input_file.name} → data_archive/{destination.parent.name}/{destination.name}")
     if archived == 0:
         print(f"  ⚠ No raw files found in input_data/{folder_name}/ — nothing to archive.")
+
+    # The merged data is uploaded and archived, so the leftover source subfolders can go
+    delete_leftover_subfolders(folder)
 
 
 def upload_and_archive(csv_path, table, columns, staging=None):

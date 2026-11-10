@@ -12,10 +12,10 @@ if not input_csvs:
 output_dir = project_root / "outputs"
 output_dir.mkdir(exist_ok=True)
 dates_csv_path = project_root / "extracts" / "dates_pv_power.csv"
-sensor_id_value = 9
+# sensor_id_value = 9
 meter_name = "law_clinic_pv"
 output_basename = "law_clinic_pv_cleaned"
-## when done upload to table from command line using folder on server, eg. \copy pv.pv_power (sensor_id,meter_name,datetime,power_avg_kw) from '/home/eileen/uploads_uhm/law_pv_cleaned.csv' CSV HEADER;
+## when done upload to table from command line using folder on server, eg. \copy pv.pv_power (meter_name,datetime,power_avg_kw) from '/home/eileen/uploads_uhm/law_pv_cleaned.csv' CSV HEADER;
 
 
 print("=" * 80)
@@ -122,7 +122,7 @@ print(f"\n✓ Combined {len(input_csvs)} file(s) into {len(combined_raw)} row(s)
 
 # Add new columns with specified values
 df_cleaned = combined_raw.copy()
-df_cleaned["sensor_id"] = sensor_id_value
+# df_cleaned["sensor_id"] = sensor_id_value
 df_cleaned["meter_name"] = meter_name
 
 # --- Timestamp frequency (data is known to be 1hr resolution) ---
@@ -187,8 +187,8 @@ df_cleaned["datetime"] = df_cleaned["datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
 print(f"\n✓ Converted datetime to YYYY-MM-DD HH:MM:SS format")
 
-# Reorder columns: datetime, sensor_id, power_avg_kw, meter_name
-df_cleaned = df_cleaned[["datetime", "sensor_id", "power_avg_kw", "meter_name"]]
+# Reorder columns: datetime, power_avg_kw, meter_name
+df_cleaned = df_cleaned[["datetime", "power_avg_kw", "meter_name"]]
 
 print(f"\n✓ Cleaned data: {df_cleaned.shape[0]} rows × {df_cleaned.shape[1]} columns")
 print(f"  New columns: {list(df_cleaned.columns)}")

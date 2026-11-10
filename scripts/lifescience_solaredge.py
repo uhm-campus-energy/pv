@@ -163,6 +163,7 @@ def get_cutoff_timestamp(dates_csv, meter, freq):
 
 print(f"\nLooking up cutoff timestamp for meter '{meter_name}' (freq={freq})...")
 cutoff = get_cutoff_timestamp(dates_csv_path, meter_name, freq)
+# cutoff = None  # Disable trimming for now
 
 if cutoff is not None:
     before_trim = len(df_cleaned)
