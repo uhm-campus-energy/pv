@@ -42,7 +42,6 @@ def run_psql(copy_command, label):
         print(result.stderr)
         raise RuntimeError(f"psql export of {label} failed with exit code {result.returncode}")
 
-
 def read_dates_csv(path):
     df = pd.read_csv(path, encoding="utf-8-sig")
     df.columns = [c.strip().strip('"') for c in df.columns]
@@ -50,6 +49,11 @@ def read_dates_csv(path):
         df[col] = df[col].astype(str).str.strip().str.strip('"')
     return df
 
+def fiscal_year_code(d):
+  """Fiscal year code worked out from a date. The fiscal year runs July-June and is
+  named for the year it ends, e.g. 2025-07-01 through 2026-06-01 are all 'fy26'."""
+  end_year = d.year + 1 if d.month >= 7 else d.year
+  return f'fy{end_year % 100:02d}'
 
 print("=" * 80)
 print("AGGREGATING PV POWER DATA TO MONTHLY KWH")
@@ -157,11 +161,16 @@ out["month"] = out["month"].dt.strftime("%Y-%m-%d")
 out["kwh"] = out["kwh"].round(KWH_DECIMALS)
 out["note"] = ""
 out["campus"] = CAMPUS
+out["fiscal_year"] = pd.to_datetime(out["month"]).apply(fiscal_year_code)
+
+# make sure order is correct
+out = out[["month", "meter_name", "kwh", "note", "campus", "fiscal_year"]]
 
 print("\n" + "=" * 80)
 print("MONTHLY KWH TO UPLOAD")
 print("=" * 80)
-preview = combined[["meter_name", "month", "resolution", "readings", "kwh"]].copy()
+preview = combined[["meter_name", "month", "resolution", "readings", "kwh", "fiscal_year"]].copy()
+preview["fiscal_year"] = out["fiscal_year"]
 preview["month"] = preview["month"].dt.strftime("%Y-%m")
 preview["kwh"] = preview["kwh"].round(KWH_DECIMALS)
 print(preview.to_string(index=False))
@@ -172,7 +181,7 @@ output_csv = analysis_dir / f"monthly_kwh_aggregated_{first_month:%Y-%m}_{last_m
 out.to_csv(output_csv, index=False)
 
 print(f"\n✅ Wrote {len(out)} row(s) for {out['meter_name'].nunique()} meter(s) to: {output_csv}")
-print("   Columns: month, meter_name, kwh, note, campus")
+print("   Columns: month, meter_name, kwh, note, campus, fiscal_year")
 print("\n" + "=" * 80)
 print("✨ AGGREGATION COMPLETE!")
 print("=" * 80)

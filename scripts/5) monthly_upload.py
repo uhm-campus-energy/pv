@@ -11,7 +11,7 @@ project_root = Path(__file__).resolve().parent.parent
 analysis_dir = project_root / "analysis"
 
 TARGET_TABLE = "pv.monthly_kwh"
-COLUMNS = ["month", "meter_name", "kwh", "note", "campus"]
+COLUMNS = ["month", "meter_name", "kwh", "note", "campus", "fiscal_year"]
 
 # Usage:
 #   python "5) upload_monthly_kwh.py"                 -> newest monthly_kwh_aggregated_*.csv in analysis/
