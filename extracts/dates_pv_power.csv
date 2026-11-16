@@ -1,5 +1,5 @@
 sensor_id,meter_name,customer,building_complex_name,resolution_per_hr,building_complex_id,pv_power_start,pv_power_end,pv_power_hr_start,pv_power_hr_end,present_in_both,ranges_overlap
-1,dance_pv,Dance Building,DANCE BUILDING,4,1251,2022-01-21 12:45:00,2026-08-06 23:45:00,,,f,f
+1,dance_pv,Dance Building,DANCE BUILDING,4,1251,2022-01-21 12:45:00,2026-07-06 23:45:00,,,f,f
 2,burns_pv,East West Center (aka John A. Burns),JOHN A. BURNS HALL,4,1155,2021-07-01 00:00:00,2022-06-30 23:45:00,,,f,f
 3,frog1_pv,Frog Bldgs 1257A FROG 1,FROG 1,4,1257A,2021-07-01 00:00:00,2026-08-06 11:15:00,2025-01-23 14:00:00,2025-03-19 15:00:00,t,t
 4,frog2_pv,Frog Bldgs 1257B FROG 2,FROG 2,4,1257B,2021-07-01 00:00:00,2026-08-06 11:16:00,,,f,f

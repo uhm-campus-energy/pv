@@ -1,11 +1,21 @@
 # Data: keep the subfolder structure (via .gitkeep), ignore the files inside
-data/**
-!data/*/
-!data/*/.gitkeep
+data_archive/**/*.csv
+data_archive/**/*.pdf
+data_archive/**/*.xlsx
+data_archive/**/*.xls
+
+input_data/**/*.csv
+input_data/**/*.pdf
+input_data/**/*.xlsx
+input_data/**/*.xls
+
+outputs/*.csv
 
 # Monthly analysis: downloaded readings and generated reports
 extracts/monthly_analysis_*.csv
 analysis/
+
+eileens_notes/
 
 # Python
 __pycache__/
